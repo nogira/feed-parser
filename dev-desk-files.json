@@ -3,7 +3,8 @@
         "lib": {
             "/": [
                 "strand.hoon",
-                "strandio.hoon"
+                "strandio.hoon",
+                "test.hoon"
             ]
         },
         "mar": {

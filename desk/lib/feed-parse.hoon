@@ -1,5 +1,6 @@
 :: this lib is based on https://github.com/feed-rs/feed-rs (fave feed lib !!)
 :: atom specs: https://validator.w3.org/feed/docs/atom.html
+=<
 |%
 +$  category
   $:  term=@t
@@ -165,61 +166,7 @@
       =/  arr  (get-arr-attr obj-val 'authors')
       !!
     :: convert @t of json feed to @da
-    ++  p-date
-      =<
-      |=  t=@t
-      ^-  @da
-      :: time format: https://www.rfc-editor.org/rfc/rfc3339
-      :: e.g. '2020-08-07T11:44:36-05:00'
-      :: y:m:d
-      =+  yr=`@t`(cut 3 [0 4] t)
-      =+  mo=(no-zero t 5)
-      =+  dy=(no-zero t 8)
-      :: h:m:s
-      =+  hr=(no-zero t 11)  :: TODO: account for time-zone in hrs and min by add/sub'ing
-      =+  mn=(no-zero t 14)
-      =+  sc=(no-zero t 17)
-      :: timezone (account for timezone)
-      =/  df=@dr  ?:  =(`@t`(cut 3 [19 1] t) 'Z')  :: if no timezone, no need to change
-                    ~m0  :: 0 min
-                  =+  hr-df=`@dr`(yule `tarp`[0 (num (no-zero t 20)) 0 0 ~])
-                  =+  mn-df=`@dr`(yule `tarp`[0 0 (num (no-zero t 23)) 0 ~])
-                  `@dr`(add hr-df mn-df)
-      :: check if positive or negative diff
-      :: from time format link above:
-      :: > 1990-12-31T15:59:60-08:00
-      :: > This represents the same leap second in Pacific Standard Time, 8
-      :: > hours behind UTC.
-      :: thus, `-` diff requires adding the @dr to @da to acheive UTC
-      =*  df-op   ?:  =(`@t`(cut 3 [19 1] t) '+')
-                    sub
-                  add
-      ^-  @da  ^-  @
-      ~&  "crash here?"
-      :: add/subtract timezone diff (@dr) to/from datetime (@da)
-      :: FIXME: THIS FAILS !!!!!
-      %+  df-op
-        :: create @da
-        %-  year
-        :-  [a=%.y y=(num yr)]
-        :-  m=(num mo)
-        t=[d=(num dy) h=(num hr) m=(num mn) s=(num sc) f=~]
-      df
-      ::
-      |%
-      :: convert @t to @ud
-      ++  num
-        |=  in=@t
-        ^-  @ud
-        (need (slaw %ud in))
-      :: convert 2 digit @t string that may begin with a zero to @t string not starting at zero
-      ++  no-zero
-        |=  [a=@t i=@ud]
-        ?:  =(`@t`(cut 3 [i 1] a) '0')
-          `@t`(cut 3 [+(i) 1] a)
-        `@t`(cut 3 [i 2] a)
-      --
-    ++  p-entries
+      ++  p-entries
       =<
       |=  obj-val=(map @t json)
       =/  arr  (get-arr-attr obj-val 'items')
@@ -312,5 +259,59 @@
     --
     |%  :: --atom parsing--
     --
+  --
+--
+:: --general helper functions--
+|%
+++  p-date
+  =<
+  |=  t=@t
+  ^-  @da
+  :: time format: https://www.rfc-editor.org/rfc/rfc3339
+  :: e.g. '2020-08-07T11:44:36-05:00'
+  :: y:m:d
+  =+  yr=`@t`(cut 3 [0 4] t)
+  =+  mo=(cut-2 t 5)
+  =+  dy=(cut-2 t 8)
+  :: h:m:s
+  =+  hr=(cut-2 t 11)
+  =+  mn=(cut-2 t 14)
+  =+  sc=(cut-2 t 17)
+  :: timezone (account for timezone)
+  =/  df=@dr  ?:  =(`@t`(cut 3 [19 1] t) 'Z')  :: if no timezone, no need to change
+                ~m0  :: 0 min
+              =+  hr-df=`@dr`(yule `tarp`[0 (num (cut-2 t 20)) 0 0 ~])
+              =+  mn-df=`@dr`(yule `tarp`[0 0 (num (cut-2 t 23)) 0 ~])
+              `@dr`(add hr-df mn-df)
+  :: check if positive or negative diff
+  ::   from time format link above:
+  ::     > 1990-12-31T15:59:60-08:00
+  ::     > This represents the same leap second in Pacific Standard Time, 8
+  ::     > hours behind UTC.
+  ::   thus, `-` diff requires adding the @dr to @da to acheive UTC
+  =*  df-op   ?:  =(`@t`(cut 3 [19 1] t) '+')
+                sub
+              add
+  ^-  @da  ^-  @
+  ~&  "crash here?"
+  :: add/subtract timezone diff (@dr) to/from datetime (@da)
+  %+  df-op
+    :: create @da
+    %-  year
+    :-  [a=%.y y=(num yr)]
+    :-  m=(num mo)
+    t=[d=(num dy) h=(num hr) m=(num mn) s=(num sc) f=~]
+  df
+  ::
+  |%
+  :: convert @t to @ud
+  ++  num
+    |=  in=@t
+    ^-  @ud
+    (scan (trip in) dem)
+  :: cut 2 digit @t string from larger @t string
+  ++  cut-2
+    |=  [a=@t i=@ud]
+    `@t`(cut 3 [i 2] a)
   --
 --

@@ -1,14 +1,17 @@
-/+  *test, *absolute
+/+  *test, *feed-parse
 |%
-++  test-absolute
+++  test-p-date
   ;:  weld
   %+  expect-eq
-    !>  .1
-    !>  (absolute .-1)
+    !>  ~2020.8.7..16.44.36
+    !>  (p-date '2020-08-07T11:44:36-05:00')
   %+  expect-eq
-    !>  .1
-    !>  (absolute .1)
+    !>  ~2020.8.7..6.44.36
+    !>  (p-date '2020-08-07T11:44:36+05:00')
+  %+  expect-eq
+    !>  ~2020.8.7..11.44.36
+    !>  (p-date '2020-08-07T11:44:36Z')
   %-  expect-fail
-    |.  (absolute .0)
+    |.  (p-date '2020-08-07')
   ==
 --
