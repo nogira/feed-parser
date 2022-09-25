@@ -1,0 +1,26 @@
+{
+    "%base": {
+        "lib": {
+            "/": [
+                "strand.hoon",
+                "strandio.hoon"
+            ]
+        },
+        "mar": {
+            "/": [
+                "hoon.hoon",
+                "kelvin.hoon",
+                "mime.hoon",
+                "noun.hoon",
+                "txt-diff.hoon",
+                "txt.hoon"
+            ]
+        },
+        "sur": {
+            "/": [
+                "spider.hoon"
+            ]
+        }
+    },
+    "%garden": {}
+}

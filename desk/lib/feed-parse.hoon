@@ -134,8 +134,8 @@
   :: get first char of feed `cord` to determine is json or xml
   ?:  =(`@t`(cut 3 [0 1] feed-str) '{')
     (json-parse feed-str)
-  (xml-parse feed-str)
-  :: *feed
+  :: (xml-parse feed-str)
+  *feed
   |%
   ++  json-parse
     =<
@@ -144,20 +144,149 @@
     =/  j  (need (de-json:html feed-str))  :: if crash, good :)
     =*  inp  (get-obj j)
     =|  out=feed
-    ~&  inp
-    =.  authors.out  
+    :: ~&  inp
+    :: =.  authors.out  (p-authors inp)
     =.  title.out  [~ content-type='text' src=~ content=(get-str-attr inp 'title')]
+    ::
+    ~&  "TEST"
+    ::
+    ~&  (p-entries inp)
+    ::
+    :: =/  obj-val  [[p='version' q=[%o p=[p='version' q=[%s p='https://jsonfeed.org/version/1']]]]]
+    :: ~&  (get-obj-attr obj-val 'version')
+    ::
+    ::
     !!
+    :: --parsing the diff types--
+    =<
+    |%
+    ++  p-authors
+      |*  obj-val=(map @t *)
+      =/  arr  (get-arr-attr obj-val 'authors')
+      !!
+    :: convert @t of json feed to @da
+    ++  p-date
+      =<
+      |=  t=@t
+      ^-  @da
+      :: time format: https://www.rfc-editor.org/rfc/rfc3339
+      :: e.g. '2020-08-07T11:44:36-05:00'
+      :: y:m:d
+      =+  yr=`@t`(cut 3 [0 4] t)
+      =+  mo=(no-zero t 5)
+      =+  dy=(no-zero t 8)
+      :: h:m:s
+      =+  hr=(no-zero t 11)  :: TODO: account for time-zone in hrs and min by add/sub'ing
+      =+  mn=(no-zero t 14)
+      =+  sc=(no-zero t 17)
+      :: timezone (account for timezone)
+      =/  df=@dr  ?:  =(`@t`(cut 3 [19 1] t) 'Z')  :: if no timezone, no need to change
+                    ~m0  :: 0 min
+                  =+  hr-df=`@dr`(yule `tarp`[0 (num (no-zero t 20)) 0 0 ~])
+                  =+  mn-df=`@dr`(yule `tarp`[0 0 (num (no-zero t 23)) 0 ~])
+                  `@dr`(add hr-df mn-df)
+      :: check if positive or negative diff
+      :: from time format link above:
+      :: > 1990-12-31T15:59:60-08:00
+      :: > This represents the same leap second in Pacific Standard Time, 8
+      :: > hours behind UTC.
+      :: thus, `-` diff requires adding the @dr to @da to acheive UTC
+      =*  df-op   ?:  =(`@t`(cut 3 [19 1] t) '+')
+                    sub
+                  add
+      ^-  @da  ^-  @
+      ~&  "crash here?"
+      :: add/subtract timezone diff (@dr) to/from datetime (@da)
+      :: FIXME: THIS FAILS !!!!!
+      %+  df-op
+        :: create @da
+        %-  year
+        :-  [a=%.y y=(num yr)]
+        :-  m=(num mo)
+        t=[d=(num dy) h=(num hr) m=(num mn) s=(num sc) f=~]
+      df
+      ::
+      |%
+      :: convert @t to @ud
+      ++  num
+        |=  in=@t
+        ^-  @ud
+        (need (slaw %ud in))
+      :: convert 2 digit @t string that may begin with a zero to @t string not starting at zero
+      ++  no-zero
+        |=  [a=@t i=@ud]
+        ?:  =(`@t`(cut 3 [i 1] a) '0')
+          `@t`(cut 3 [+(i) 1] a)
+        `@t`(cut 3 [i 2] a)
+      --
+    ++  p-entries
+      =<
+      |=  obj-val=(map @t json)
+      =/  arr  (get-arr-attr obj-val 'items')
+      =|  entry=entry
+      =/  i  1
+      :: |-
+      =/  o  (get-obj (do-the-thing arr i))
+      :: published=(unit @da)
+      ~&  (get-str-attr o 'date_published')
+      ~&  (p-date (get-str-attr o 'date_published'))
+      =.  published.entry  [~ (p-date (get-str-attr o 'date_published'))]
+      ~&  (need published.entry)
+      :: $(i +(i))
+      !!
+      |%
+      ++  do-the-thing  :: TODO: maybe should conv to normie manual list loop 🤔
+        |=  [arr=(list json) i=@ud]
+        ?+  i  !!
+          %1  &1:arr
+          %2  &2:arr
+          %3  &3:arr
+          %4  &4:arr
+          %5  &5:arr
+          %6  &6:arr
+          %7  &7:arr
+          %8  &8:arr
+          %9  &9:arr
+          %10  &10:arr
+          %11  &11:arr
+          %12  &12:arr
+          %13  &13:arr
+          %14  &14:arr
+          %15  &15:arr
+          %16  &16:arr
+          %17  &17:arr
+          %18  &18:arr
+          %19  &19:arr
+          %20  &20:arr
+        ==
+      --
+    --
     :: --manual json parsing helper functions--
     |%
     :: get `*` from `[%o *]`
     ++  get-obj
       |=  obj=json
-      ?>  ?=([%o *] obj)
+      ^-  (map @t json)
+      ?>  ?=([%o p=*] obj)
       p:obj
+    :: get object value using key on object
+    :: ++  get-obj-attr
+    ::   |*  [obj-val=(map @t json) key=@t]
+    ::   :: ^-  (map @t json)
+    ::   =/  attr  (need (~(get by obj-val) key))
+    ::   ?>  ?=([%o p=*] attr)  :: for some reason i need to add `p=` to be able 
+    ::   p:attr                  :: to find p for `%s`, but not for `%o`
+    :: :: get string value using key on object
+    :: get array value using key on object
+    ++  get-arr-attr
+      |=  [obj-val=(map @t json) key=@t]
+      ^-  (list json)
+      =/  attr  (need (~(get by obj-val) key))
+      ?>  ?=([%a p=*] attr)  :: for some reason i need to add `p=` to be able 
+      p:attr                 :: to find p for `%s` and `%a`, but not for `%o`
     :: get string value using key on object
     ++  get-str-attr
-      |=  [obj-val=(map @t *) key=@t]
+      |=  [obj-val=(map @t json) key=@t]
       ^-  @t
       =/  attr  (need (~(get by obj-val) key))
       ?>  ?=([%s p=@t] attr)  :: for some reason i need to add `p=` to be able 
@@ -165,15 +294,23 @@
     --
   ::
   ++  xml-parse
+    =<
     |=  feed-str=@t
     ^-  feed
     =/  xml  (need (de-xml:html feed-str))
-    ~&  n:g:xml  :: if this is %feed, it's an atom feed, else it's a rss feed
+    ~&  n:g:xml
     =*  elem-list  c:xml
+    ?:  =(n:g:xml %feed)  :: if this is %feed, it's an atom feed, else it's a rss feed
+      !!
     :: loop through each xml base-attribute, with a switch statment procossing 
     :: each element. including other arms that e.g. does the processing 
     :: (looping through elements/attributes) for an author, etc
     |-
     !!
+    =<
+    |%  :: --rss parsing--
+    --
+    |%  :: --atom parsing--
+    --
   --
 --
