@@ -145,67 +145,54 @@
     =/  j  (need (de-json:html feed-str))  :: if crash, good :)
     =*  inp  (get-obj j)
     =|  out=feed
-    :: ~&  inp
-    :: =.  authors.out  (p-authors inp)
-    =.  title.out  [~ content-type='text' src=~ content=(get-str-attr inp 'title')]
+    =.  authors.out  (p-authors inp)
+    =.  entries.out  (p-entries inp)
+    =.  feed-type.out  %json
+    =.  title.out  [~ content-type='text' src=~ content=(need (get-str-attr inp 'title'))]
     ::
     ~&  "TEST"
     ::
-    ~&  (p-entries inp)
     ::
     :: =/  obj-val  [[p='version' q=[%o p=[p='version' q=[%s p='https://jsonfeed.org/version/1']]]]]
     :: ~&  (get-obj-attr obj-val 'version')
-    ::
-    ::
-    !!
+    out
     :: --parsing the diff types--
     =<
     |%
     ++  p-authors
-      |*  obj-val=(map @t *)
+      |=  obj-val=(map @t json)
+      ^-  (list person)
       =/  arr  (get-arr-attr obj-val 'authors')
-      !!
+      ~&  arr
+      %+  turn  arr
+        |*  a=*
+        =|  author=person
+        =/  o  (get-obj a)
+        =.  email.author  ~
+        =.  uri.author  (get-str-attr o 'url')
+        =.  name.author  (need (get-str-attr o 'name'))
+        author
     :: convert @t of json feed to @da
-      ++  p-entries
+    ++  p-entries
       =<
       |=  obj-val=(map @t json)
+      ^-  (list entry)
       =/  arr  (get-arr-attr obj-val 'items')
-      =|  entry=entry
-      =/  i  1
-      :: |-
-      =/  o  (get-obj (do-the-thing arr i))
-      :: published=(unit @da)
-      ~&  (get-str-attr o 'date_published')
-      ~&  (p-date (get-str-attr o 'date_published'))
-      =.  published.entry  [~ (p-date (get-str-attr o 'date_published'))]
-      ~&  (need published.entry)
-      :: $(i +(i))
-      !!
+      =|  entries=(list entry)
+      :: map over entries
+      %+  turn  arr
+        |*  a=*
+        =|  entry=entry
+        =/  o  (get-obj a)
+        =.  authors.entry  (p-authors o)
+        =.  id.entry  (need (get-str-attr o 'id'))
+        :: published=(unit @da)
+        =.  published.entry  (p-date (get-str-attr o 'date_published'))
+        :: title=(unit text)
+        =.  title.entry  [~ content-type='text' src=~ content=(need (get-str-attr o 'title'))]
+        entry
+      ::
       |%
-      ++  do-the-thing  :: TODO: maybe should conv to normie manual list loop 🤔
-        |=  [arr=(list json) i=@ud]
-        ?+  i  !!
-          %1  &1:arr
-          %2  &2:arr
-          %3  &3:arr
-          %4  &4:arr
-          %5  &5:arr
-          %6  &6:arr
-          %7  &7:arr
-          %8  &8:arr
-          %9  &9:arr
-          %10  &10:arr
-          %11  &11:arr
-          %12  &12:arr
-          %13  &13:arr
-          %14  &14:arr
-          %15  &15:arr
-          %16  &16:arr
-          %17  &17:arr
-          %18  &18:arr
-          %19  &19:arr
-          %20  &20:arr
-        ==
       --
     --
     :: --manual json parsing helper functions--
@@ -228,16 +215,24 @@
     ++  get-arr-attr
       |=  [obj-val=(map @t json) key=@t]
       ^-  (list json)
-      =/  attr  (need (~(get by obj-val) key))
+      =/  attr  (~(get by obj-val) key)
+      :: if null, return null
+      ?~  attr
+        ~
+      =/  attr  (need attr)
       ?>  ?=([%a p=*] attr)  :: for some reason i need to add `p=` to be able 
       p:attr                 :: to find p for `%s` and `%a`, but not for `%o`
     :: get string value using key on object
     ++  get-str-attr
       |=  [obj-val=(map @t json) key=@t]
-      ^-  @t
-      =/  attr  (need (~(get by obj-val) key))
+      ^-  (unit @t)
+      =/  attr  (~(get by obj-val) key)
+      :: if null, return null
+      ?~  attr
+        ~
+      =/  attr  (need attr)
       ?>  ?=([%s p=@t] attr)  :: for some reason i need to add `p=` to be able 
-      p:attr                  :: to find p for `%s`, but not for `%o`
+      [~ p:attr]              :: to find p for `%s`, but not for `%o`
     --
   ::
   ++  xml-parse
@@ -265,8 +260,12 @@
 |%
 ++  p-date
   =<
-  |=  t=@t
-  ^-  @da
+  |=  t=(unit @t)
+  ^-  (unit @da)
+  :: return null if input is null
+  ?~  t
+    ~
+  =/  t  (need t)
   :: time format: https://www.rfc-editor.org/rfc/rfc3339
   :: e.g. '2020-08-07T11:44:36-05:00'
   :: y:m:d
@@ -292,8 +291,9 @@
   =*  df-op   ?:  =(`@t`(cut 3 [19 1] t) '+')
                 sub
               add
+  :: return as unit
+  :-  ~
   ^-  @da  ^-  @
-  ~&  "crash here?"
   :: add/subtract timezone diff (@dr) to/from datetime (@da)
   %+  df-op
     :: create @da
