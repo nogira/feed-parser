@@ -3,14 +3,13 @@
 =<
 |%
 +$  category
-  $:  term=@t
+  $:  label=(unit @t)
       scheme=(unit @t)
-      label=(unit @t)
+      term=@t
   ==
 +$  content
   $:  body=(unit @t)
-      :: should be mime, see $+text for more details
-      content-type=@t
+      content-type=@t  :: should be mime, see $+text for more details
       length=(unit @ud)
       src=(unit link)
   ==
@@ -42,8 +41,7 @@
       language=(unit @t)
       links=(list link)
       logo=(unit image)
-      :: date in UTC timezone
-      published=(unit @da)
+      published=(unit @da)  :: date in UTC timezone
       rating=(unit media-rating)
       rights=(unit text)
       title=(unit text)
@@ -56,76 +54,76 @@
       version=(unit @t)
   ==
 +$  image
-  $:  uri=@t
-      title=(unit @t)
-      link=(unit link)
-      width=(unit @ud)
+  $:  description=(unit @t)
       height=(unit @ud)
-      description=(unit @t)
+      link=(unit link)
+      title=(unit @t)
+      uri=@t
+      width=(unit @ud)
   ==
 +$  link
   $:  href=@t
-      rel=(unit @t)
-      media-type=(unit @t)
       href-lang=(unit @t)
-      title=(unit @t)
       length=(unit @ud)
+      media-type=(unit @t)
+      rel=(unit @t)
+      title=(unit @t)
   ==
 +$  media-community
   $:  stars-avg=(unit @rs)
       stars-count=(unit @ud)
       stars-min=(unit @ud)
       stars-max=(unit @ud)
-      stats-views=(unit @ud)
       stats-favorites=(unit @ud)
+      stats-views=(unit @ud)
   ==
 +$  media-content
-  $:  url=(unit purl:eyre)
-      :: should be (unit mime), see $+text for more details
-      content-type=(unit @t)
-      height=(unit @ud)
-      width=(unit @ud)
+  $:  content-type=(unit @t)  :: should be (unit mime), see $+text for more details
       duration=(unit @dr)
-      size=(unit @ud)
+      height=(unit @ud)
       rating=(unit media-rating)
+      size=(unit @ud)
+      url=(unit @t)
+      width=(unit @ud)
   ==
 +$  media-credit  entity=@t
 +$  media-object
-  $:  title=(unit text)
+  $:  community=(unit media-community)
       content=(list media-content)
-      duration=(unit @dr)
-      thumbnails=(list media-thumbnail)
-      texts=(list media-text)
-      description=(unit text)
-      community=(unit media-community)
       credits=(list media-credit)
+      description=(unit text)
+      duration=(unit @dr)
+      texts=(list media-text)
+      thumbnails=(list media-thumbnail)
+      title=(unit text)
   ==
 +$  media-rating
   $:  urn=@t
       value=@t
   ==
 +$  media-text
-  $:  =text
+  $:  end-time=(unit @dr)
       start-time=(unit @dr)
-      end-time=(unit @dr)
+      =text
   ==
 +$  media-thumbnail
   $:  =image
       time=(unit @dr)
   ==
 +$  person
-  $:  name=@t
-      uri=(unit @t)
+  $:  avatar=(unit @t)
       email=(unit @t)
+      name=@t
+      uri=(unit @t)
   ==
 +$  text
+  $:  content=@t
       :: feed-rs uses type `mime` for  `content-type`, but idk how to do enums 
       :: with default vals, so just doing str instead
       :: if figure out, here is the mimes data type to copy:
       :: https://docs.rs/mime/0.3.16/mime/index.html
-  $:  content-type=@t
+      content-type=@t
       src=(unit @t)
-      content=@t
   ==
 ::
 ++  parse-feed
@@ -145,54 +143,205 @@
     =/  j  (need (de-json:html feed-str))  :: if crash, good :)
     =*  inp  (get-obj j)
     =|  out=feed
+    :: authors
     =.  authors.out  (p-authors inp)
+    :: categories
+    ::   - non-existent
+    :: contributors
+    ::   - non-existent
+    :: description
+    =/  desc  (get-str-attr inp 'description')
+    =.  description.out  ?~  desc
+        ~
+      [~ content=(need desc) content-type='text' src=~]
+    :: entries
     =.  entries.out  (p-entries inp)
+    :: feed-type
     =.  feed-type.out  %json
-    =.  title.out  [~ content-type='text' src=~ content=(need (get-str-attr inp 'title'))]
-    ::
-    ~&  "TEST"
-    ::
+    :: generator
+    ::   - non-existent
+    :: icon
+    =/  icon  (get-str-attr inp 'icon')
+    =.  icon.out  ?~  icon
+        ~
+      [~ [description=~ height=~ link=~ title=~ uri=(need icon) width=~]]
+    :: id
+    =.  id.out  (need (get-str-attr inp 'feed_url'))
+    :: language
+    =.  language.out  (get-str-attr inp 'language')
+    :: links
+    =.  links.out  (p-links inp)
+    :: logo
+    =/  fi  (get-str-attr inp 'favicon')
+    =.  logo.out  ?~  fi
+        ~
+      [~ [description=~ height=~ link=~ title=~ uri=(need fi) width=~]]
+    :: published
+    ::   - non-existent
+    :: rating
+    ::   - non-existent
+    :: rights
+    ::   - non-existent
+    :: title (mandatory val so no need to handle optional)
+    =.  title.out  [~ content=(need (get-str-attr inp 'title')) content-type='text' src=~]
+    :: ttl
+    ::   - non-existent
+    :: updated
+    ::   - non-existent
     ::
     :: =/  obj-val  [[p='version' q=[%o p=[p='version' q=[%s p='https://jsonfeed.org/version/1']]]]]
     :: ~&  (get-obj-attr obj-val 'version')
     out
+    ::
     :: --parsing the diff types--
     =<
     |%
+    ++  p-links
+      |=  mp=(map @t json)
+      ^-  (list link)
+      =/  attr-names  (limo ~['home_page_url' 'feed_url' 'next_url'])
+      =/  urls  %+  turn  attr-names
+        |=  at=@t
+        =/  v  (get-str-attr mp at)
+        ?~  v
+          ~
+        (need v)
+      :: rm nulls
+      =/  urls  `(list @t)``(list @)`(skim urls |*(url=* ?!(?=(%~ url))))
+      (turn urls |=(a=@t [href=a href-lang=~ length=~ media-type=~ rel=~ title=~]))
     ++  p-authors
-      |=  obj-val=(map @t json)
+      |=  mp=(map @t json)
       ^-  (list person)
-      =/  arr  (get-arr-attr obj-val 'authors')
-      ~&  arr
+      =/  arr  (get-arr-attr mp 'authors')
       %+  turn  arr
         |*  a=*
         =|  author=person
-        =/  o  (get-obj a)
+        =/  mp  (get-obj a)
         =.  email.author  ~
-        =.  uri.author  (get-str-attr o 'url')
-        =.  name.author  (need (get-str-attr o 'name'))
+        =.  avatar.author  (get-str-attr mp 'avatar')
+        =.  uri.author  (get-str-attr mp 'url')
+        =.  name.author  (need (get-str-attr mp 'name'))
         author
     :: convert @t of json feed to @da
     ++  p-entries
       =<
-      |=  obj-val=(map @t json)
+      :: input object value
+      |=  mp=(map @t json)
       ^-  (list entry)
-      =/  arr  (get-arr-attr obj-val 'items')
+      =/  arr  (get-arr-attr mp 'items')
       =|  entries=(list entry)
       :: map over entries
       %+  turn  arr
         |*  a=*
         =|  entry=entry
-        =/  o  (get-obj a)
-        =.  authors.entry  (p-authors o)
-        =.  id.entry  (need (get-str-attr o 'id'))
-        :: published=(unit @da)
-        =.  published.entry  (p-date (get-str-attr o 'date_published'))
-        :: title=(unit text)
-        =.  title.entry  [~ content-type='text' src=~ content=(need (get-str-attr o 'title'))]
+        =/  mp  (get-obj a)
+        :: authors
+        =.  authors.entry  (p-authors mp)
+        :: categories
+        =/  arr  (get-arr-attr mp 'tags')
+        =.  categories.entry  ?~  arr
+            ~
+          =/  tgs  %+  turn  arr
+            |*  a=*
+            ^-  @t
+            ?:  ?=([%s p=@t] a)
+              p:a
+            ''
+          (turn tgs |=(tg=@t [label=[~ tg] scheme=~ term=tg]))
+        :: content
+        =/  cnt  (get-str-attr mp 'content_html')
+        =/  src  (get-str-attr mp 'url')
+        =/  lnk  ?~  src
+            ~
+          [~ href=(need src) href-lang=~ length=~ media-type=~ rel=~ title=~]
+        =.  content.entry  ?~  cnt
+            :: if null
+            =/  cnt  (get-str-attr mp 'content_text')
+            [~ body=cnt content-type='text' length=~ src=lnk]
+          :: if present
+          [~ body=cnt content-type='html' length=~ src=lnk]
+        :: contributors
+        ::   - non-existent
+        :: id
+        =.  id.entry  (need (get-str-attr mp 'id'))
+        :: links
+        =/  lnk  (get-str-attr mp 'external_url')
+        =.  links.entry  ?~  lnk
+            ~
+          %-  limo
+          ~[[href=(need lnk) href-lang=~ length=~ media-type=~ rel=~ title=~]]
+        :: media
+        =.  media.entry  (p-media mp)
+        :: published 
+        =.  published.entry  (p-date (get-str-attr mp 'date_published'))
+        :: rights
+        ::   - non-existent
+        :: source
+        =.  source.entry  src
+        :: summary
+        =/  sm  (get-str-attr mp 'summary')
+        =.  summary.entry  ?~  sm
+            ~
+          [~ content=(need sm) content-type='text' src=~]
+        :: title
+        =/  tt  (get-str-attr mp 'title')
+        =.  title.entry  ?~  tt
+            ~
+          [~ content=(need tt) content-type='text' src=~]
+        :: updated
+        =.  updated.entry  (p-date (get-str-attr mp 'date_modified'))
+        ::
         entry
       ::
       |%
+      ++  p-media
+        |=  mp=(map @t json)
+        ^-  (list media-object)
+        :: attachments
+        =/  arr  (get-arr-attr mp 'attachments')
+        =/  lm=(list media-object)  ?~  arr
+            ~
+          :: convert list of attachments to list of media-object
+          =/  ams  %+  turn  arr
+            |*  el=*
+            ^-  media-object
+            =/  mp  (get-obj el)
+            =/  url  (get-str-attr mp 'url')
+            =/  mim  (get-str-attr mp 'mime_type')
+            =/  tt  (get-str-attr mp 'title')
+            =/  ttt  ?~  tt
+                ~
+              [~ content=(need tt) content-type='text' src=~]
+            =/  sz  (get-num-attr mp 'size_in_bytes')
+            =/  dr  (get-num-attr mp 'duration_in_seconds')
+            =/  dur  ?~  dr
+                ~
+              [~ `@dr`(yule `tarp`[0 0 0 (need dr) ~])]
+            ~&  *media-content
+            =/  cont=(list media-content)  (limo ~[[content-type=mim duration=dur height=~ rating=~ size=sz url=url width=~]])
+            =/  mob=media-object  [community=~ content=cont credits=~ description=~ duration=~ texts=~ thumbnails=~ title=ttt]
+            mob
+          ::
+          ams
+        ::
+        :: main image
+        =/  im  (get-str-attr mp 'image')
+        :: append if present
+        =.  lm  ?~  im
+            lm
+          =/  cont  (limo ~[[content-type=[~ 'image'] duration=~ height=~ rating=~ size=~ url=im width=~]])
+          =/  mob  [community=~ content=cont credits=~ description=~ duration=~ texts=~ thumbnails=~ title=~]
+          [mob lm]
+        :: banner image
+        =/  im  (get-str-attr mp 'banner_image')
+        :: append if present
+        =.  lm  ?~  im
+            lm
+          =/  cont  (limo ~[[content-type=[~ 'image'] duration=~ height=~ rating=~ size=~ url=im width=~]])
+          =/  mob  [community=~ content=cont credits=~ description=~ duration=~ texts=~ thumbnails=~ title=~]
+          [mob lm]
+        ::
+        lm
       --
     --
     :: --manual json parsing helper functions--
@@ -213,9 +362,9 @@
     :: :: get string value using key on object
     :: get array value using key on object
     ++  get-arr-attr
-      |=  [obj-val=(map @t json) key=@t]
+      |=  [mp=(map @t json) key=@t]
       ^-  (list json)
-      =/  attr  (~(get by obj-val) key)
+      =/  attr  (~(get by mp) key)
       :: if null, return null
       ?~  attr
         ~
@@ -224,15 +373,27 @@
       p:attr                 :: to find p for `%s` and `%a`, but not for `%o`
     :: get string value using key on object
     ++  get-str-attr
-      |=  [obj-val=(map @t json) key=@t]
+      |=  [mp=(map @t json) key=@t]
       ^-  (unit @t)
-      =/  attr  (~(get by obj-val) key)
+      =/  attr  (~(get by mp) key)
       :: if null, return null
       ?~  attr
         ~
       =/  attr  (need attr)
       ?>  ?=([%s p=@t] attr)  :: for some reason i need to add `p=` to be able 
       [~ p:attr]              :: to find p for `%s`, but not for `%o`
+    :: get number value using key on object
+    ++  get-num-attr
+      |=  [mp=(map @t json) key=@t]
+      ^-  (unit @ud)
+      =/  attr  (~(get by mp) key)
+      :: if null, return null
+      ?~  attr
+        ~
+      =/  attr  (need attr)
+      ?>  ?=([%n p=@ta] attr)  :: json numbers are knots bc reasons
+      :: [~ p:attr]
+      [~ (ni:dejs:format attr)]
     --
   ::
   ++  xml-parse
