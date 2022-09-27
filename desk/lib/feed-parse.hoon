@@ -572,7 +572,7 @@
           %contributor  =.  contributors.accum  (p-person elem contributors.accum)  accum
           %id  =.  id.accum  (need (inner-txt elem))  accum
           %link  =.  links.accum  (p-link elem links.accum)  accum
-          [%media %group]  accum
+          [%media %group]  =.  media.accum  (p-media-group elem media.accum)  accum
           %published  =.  published.accum  (p-date (inner-txt elem))  accum
           %rights  =.  rights.accum  (p-text elem)  accum
           %source  =.  source.accum  (p-source elem)  accum
@@ -599,7 +599,98 @@
         ==
       =.  body.out  (inner-txt el)
       [~ out]
-    ++  p-media-group  add
+    ++  p-media-group
+      =<
+      |=  [el=manx mol=(list media-object)]
+      ^-  (list media-object)
+      =/  elems  c:el
+      :-
+      %+  roll  elems
+        |=  [elem=manx accum=media-object]
+        ^-  media-object
+        =/  tag  n:g:elem
+        ~&  tag
+        ?+  tag  ~&  "MEDIA OBJECT TAG NOT FOUND: {<tag>}"  accum
+        :: TODO: add more tags !!
+        :: credits=(list media-credit)
+        :: duration=(unit @dr)
+        :: texts=(list media-text)
+          [%media %community]  =.  community.accum  (p-media-community elem)  accum
+          [%media %content]  =.  content.accum  (p-media-content elem content.accum)  accum
+          [%media %description]  =.  description.accum  (p-text elem)  accum
+          [%media %thumbnail]  =.  thumbnails.accum  (p-media-thumbnail elem thumbnails.accum)  accum
+          [%media %title]  =.  title.accum  (p-text elem)  accum
+        ==
+      mol
+      |%
+      ++  p-media-content
+        |=  [el=manx mcl=(list media-content)]
+        ^-  (list media-content)
+        =/  attrs  a:g:el
+        :-
+        %+  roll  attrs
+          :: check ++p-link for info about `[@tas @tas]`
+          |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=media-content]
+          ^-  media-content
+          =/  txt  [~ (crip val)]
+          ?+  tag  ~&  "MEDIA CONTENT ATTR NOT FOUND: {<tag>}"  accum
+            %duration  =.  duration.accum  [~ `@dr`(yule `tarp`[0 0 0 (scan (trip (need txt)) dem) ~])]  accum
+            :: %fileSize is incorrect syntax to impossible to match the 
+            :: %fileSize term (and idk how tf the xml even made the %fileSize 
+            :: term in the first place given its incorrect syntax ????)
+            :: %fileSize  =.  size.accum  [~ (scan (trip (need txt)) dem)]  accum
+            %height  =.  height.accum  [~ (scan (trip (need txt)) dem)]  accum
+            %type  =.  content-type.accum  txt  accum
+            %url  =.  url.accum  txt  accum
+            %width  =.  width.accum  [~ (scan (trip (need txt)) dem)]  accum
+          ==
+        mcl
+      ++  p-media-thumbnail
+        |=  [el=manx mtl=(list media-thumbnail)]
+        ^-  (list media-thumbnail)
+        =/  attrs  a:g:el
+        :-
+        %+  roll  attrs
+          :: check ++p-link for info about `[@tas @tas]`
+          |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=media-thumbnail]
+          ^-  media-thumbnail
+          =/  txt  (crip val)
+          ?+  tag  ~&  "MEDIA THUMBNAIL ATTR NOT FOUND: {<tag>}"  accum
+            %url  =.  uri.image.accum  txt  accum
+            %height  =.  height.image.accum  [~ (scan (trip txt) dem)]  accum
+            %width  =.  width.image.accum  [~ (scan (trip txt) dem)]  accum
+          ==
+        mtl
+      ++  p-media-community
+        |=  el=manx
+        ^-  (unit media-community)
+        =/  elems  c:el
+        :-  ~
+        %+  roll  elems
+          |=  [elem=manx accum=media-community]
+          ^-  media-community
+          =/  tag  n:g:elem
+          ~&  tag
+          ?+  tag  ~&  "MEDIA COMMUNITY TAG NOT FOUND: {<tag>}"  accum
+          :: TODO: add more tags !!
+            :: %starRating incorrect syntax
+            :: [%media %starRating]  accum
+            [%media %statistics]  =.  accum  (p-media-statistics elem accum)  accum
+          ==
+      ++  p-media-statistics
+        |=  [el=manx mtl=media-community]
+        ^-  media-community
+        =/  attrs  a:g:el
+        %+  roll  attrs
+          :: check ++p-link for info about `[@tas @tas]`
+          |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=media-community]
+          ^-  media-community
+          =/  txt  (crip val)
+          ?+  tag  ~&  "MEDIA STATS ATTR NOT FOUND: {<tag>}"  accum
+            %views  =.  stats-views.accum  [~ (scan (trip txt) dem)]  accum
+            %favorites  =.  stats-favorites.accum  [~ (scan (trip txt) dem)]  accum
+          ==
+      --
     --
   --
 --
