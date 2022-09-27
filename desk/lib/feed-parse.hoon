@@ -351,14 +351,6 @@
       ^-  (map @t json)
       ?>  ?=([%o p=*] obj)
       p:obj
-    :: get object value using key on object
-    :: ++  get-obj-attr
-    ::   |*  [obj-val=(map @t json) key=@t]
-    ::   :: ^-  (map @t json)
-    ::   =/  attr  (need (~(get by obj-val) key))
-    ::   ?>  ?=([%o p=*] attr)  :: for some reason i need to add `p=` to be able 
-    ::   p:attr                  :: to find p for `%s`, but not for `%o`
-    :: :: get string value using key on object
     :: get array value using key on object
     ++  get-arr-attr
       |=  [mp=(map @t json) key=@t]
@@ -441,40 +433,173 @@
       ~&  tag  :: print element tag
       ::
       =.  out  ?+  tag  ~&  "TAG NOT FOUND: {<tag>}"  out
-          %author  out
-          %entry  out
-          %id   =.  id.out  (inner-txt elem)  out
+          %author  =.  authors.out  (p-person elem authors.out)  out
+          %category  =.  categories.out  (p-category elem categories.out)  out
+          %contributor  =.  contributors.out  (p-person elem contributors.out)  out
+          %entry  =.  entries.out  (p-entry elem entries.out)  out
+          %generator  =.  generator.out  (p-generator elem)  out
+          %icon  =/  img  *image
+            =.  uri.img  (need (inner-txt elem))
+            =.  icon.out  [~ img]  out
+          %id  =.  id.out  (need (inner-txt elem))  out
           %link  =.  links.out  (p-link elem links.out)  out
-          %published  out
-          %title  =.  title.out  [~ content=(inner-txt elem) content-type='text' src=~]  out
+          %logo  =/  img  *image
+            =.  uri.img  (need (inner-txt elem))
+            =.  logo.out  [~ img]  out
+          %published  =.  published.out  (p-date (inner-txt elem))  out
+          %rights  =.  rights.out  [~ *text]  out
+          %subtitle  =.  description.out  (p-text elem)  out
+          %title  =.  title.out  (p-text elem)  out
+          %updated  =.  updated.out  (p-date (inner-txt elem))  out
         ==
       $(bcl t:bcl, out out)
     --
-    |%  :: --xml parsing--
+    |%  :: --xml parsing--  :: TODO: might need to convert all html entities in xml inner text !!
     ++  inner-txt
       |=  el=manx
-      ^-  @t
-      (crip v:i:&1:a:g:i:&1:c:el)
+      ^-  (unit @t)
+      [~ (crip v:i:&1:a:g:i:&1:c:el)]
+    ++  p-text
+      |=  el=manx
+      ^-  (unit text)
+      =/  attrs  a:g:el
+      =/  out  %+  roll  attrs
+        :: check ++p-link for info about `[@tas @tas]`
+        |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=text]
+        ^-  text
+        =/  txt  (crip val)
+        ?+  tag  !!  :: should never crash
+          %type  =.  content-type.accum  txt  accum
+        ==
+      =.  content.out  (need (inner-txt el))
+      [~ out]
     ++  p-link
       |=  [el=manx lks=(list link)]
       ^-  (list link)
       =/  attrs  a:g:el
-      ~&  attrs
       :-
       %+  roll  attrs
         :: it seems for <link> it never uses `[@tas @tas]` from the type union, 
         :: but needs to be there anyway for the type checker
-        |=  [[term=?(@tas [@tas @tas]) val=tape] accum=link]
+        :: [@tas @tas] is for e.g. <media:group> which convs to [%media %group]
+        |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=link]
         ^-  link
-        ?+  term  !!  :: should never crash
-          %href  =.  href.accum  (crip val)  accum
-          %href-lang  =.  href-lang.accum  [~ (crip val)]  accum
-          %length  =.  length.accum  [~ (scan (trip (crip val)) dem)]  accum
-          %media-type  =.  media-type.accum  [~ (crip val)]  accum
-          %rel  =.  rel.accum  [~ (crip val)]  accum
-          %title  =.  title.accum  [~ (crip val)]  accum
+        =/  txt  [~ (crip val)]
+        ?+  tag  !!  :: should never crash
+          %href  =.  href.accum  (need txt)  accum
+          %href-lang  =.  href-lang.accum  txt  accum
+          %length  =.  length.accum  [~ (scan (trip (need txt)) dem)]  accum
+          %media-type  =.  media-type.accum  txt  accum
+          %rel  =.  rel.accum  txt  accum
+          %title  =.  title.accum  txt  accum
         ==
       lks
+    ++  p-person
+      |=  [el=manx ppl=(list person)]
+      ^-  (list person)
+      =/  elems  c:el
+      :-
+      %+  roll  elems
+        :: check ++p-link for info about `[@tas @tas]`
+        |=  [elem=manx accum=person]
+        ^-  person
+        =/  tag  n:g:elem
+        =/  txt  (inner-txt elem)
+        ?+  tag  !!  :: should never crash
+          %avatar  =.  avatar.accum  txt  accum
+          %email  =.  email.accum  txt  accum
+          %name  =.  name.accum  (need txt)  accum
+          %uri  =.  uri.accum  txt  accum
+        ==
+      ppl
+    ++  p-source
+      |=  el=manx
+      ^-  (unit @t)
+      =/  elems  c:el
+      %+  roll  elems
+        :: check ++p-link for info about `[@tas @tas]`
+        |=  [elem=manx accum=(unit @t)]
+        ^-  (unit @t)
+        =/  tag  n:g:elem
+        ?+  tag  !!  :: should never crash
+          %id  (inner-txt elem)
+        ==
+    ++  p-category
+      |=  [el=manx cts=(list category)]
+      ^-  (list category)
+      =/  attrs  a:g:el
+      :-
+      %+  roll  attrs
+        :: check ++p-link for info about `[@tas @tas]`
+        |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=category]
+        ^-  category
+        =/  txt  [~ (crip val)]
+        ?+  tag  !!  :: should never crash
+          %term  =.  term.accum  (need txt)  accum
+          %scheme  =.  scheme.accum  txt  accum
+          %label  =.  label.accum  txt  accum
+        ==
+      cts
+    ++  p-generator
+      |=  el=manx
+      ^-  (unit generator)
+      =/  attrs  a:g:el
+      =/  out  %+  roll  attrs
+        :: check ++p-link for info about `[@tas @tas]`
+        |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=generator]
+        ^-  generator
+        =/  txt  [~ (crip val)]
+        ?+  tag  !!  :: should never crash
+          %uri  =.  uri.accum  txt  accum
+          %version  =.  version.accum  txt  accum
+        ==
+      =.  content.out  (need (inner-txt el))
+      [~ out]
+    ++  p-entry
+      |=  [el=manx ets=(list entry)]
+      ^-  (list entry)
+      =/  elems  c:el
+      :-
+      %+  roll  elems
+        :: check ++p-link for info about `[@tas @tas]`
+        |=  [elem=manx accum=entry]
+        ^-  entry
+        =/  tag  n:g:elem
+        ?+  tag  ~&  "ENTRY TAG NOT FOUND: {<tag>}"  accum
+          %author  =.  authors.accum  (p-person elem authors.accum)  accum
+          %category  =.  categories.accum  (p-category elem categories.accum)  accum
+          %content  =.  content.accum  (p-content elem)  accum
+          %contributor  =.  contributors.accum  (p-person elem contributors.accum)  accum
+          %id  =.  id.accum  (need (inner-txt elem))  accum
+          %link  =.  links.accum  (p-link elem links.accum)  accum
+          [%media %group]  accum
+          %published  =.  published.accum  (p-date (inner-txt elem))  accum
+          %rights  =.  rights.accum  (p-text elem)  accum
+          %source  =.  source.accum  (p-source elem)  accum
+          %summary  =.  summary.accum  (p-text elem)  accum
+          %title  =.  title.accum  (p-text elem)  accum
+          %updated  =.  updated.accum  (p-date (inner-txt elem))  accum
+        ==
+      ets
+    ++  p-content
+      |=  el=manx
+      ^-  (unit content)
+      =/  attrs  a:g:el
+      =/  out  %+  roll  attrs
+        :: check ++p-link for info about `[@tas @tas]`
+        |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=content]
+        ^-  content
+        =/  txt  (crip val)
+        ?+  tag  !!  :: should never crash
+          %content-type  =.  content-type.accum  txt  accum
+          %length  =.  length.accum  [~ (scan (trip txt) dem)]  accum
+          %src  =/  lnk  *link
+            =.  href.lnk  txt
+            =.  src.accum  [~ lnk]  accum
+        ==
+      =.  body.out  (inner-txt el)
+      [~ out]
+    ++  p-media-group  add
     --
   --
 --
