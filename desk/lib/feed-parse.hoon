@@ -392,6 +392,35 @@
     |=  feed-str=@t
     ^-  feed
     =|  out=feed
+    :: de-xml:html seems to generally require just 1 root element (like reactjs)
+    :: , and while it can parse '<xml /><feed></feed> fine for some reason, it 
+    :: cannot parse things like '<xml /><xml-stylesheet /><rss></rss>', thus 
+    :: better to just remove all elements starting with '<xml' from cord prior 
+    :: to parsing the xml to manx
+    =/  i  0
+    =/  rdy-for-tag  |
+    =/  curr-tag  ""
+    =/  feed-str  |-
+    =/  char  `@t`(cut 3 [i 1] feed-str)
+    :: if char is '<'
+    ?:  =(char '<')
+      $(i +(i), rdy-for-tag &)
+    :: if not ready for tag collection, go next loop
+    ?.  rdy-for-tag
+      $(i +(i))
+    :: when tag is 3 long, check it matches "xml"
+    ?:  =((lent curr-tag) 4)
+      ?:  ?!(=(curr-tag "?xml"))
+        :: if doesn't match "?xml", end and return xml w/o all chars prev to "<123"
+        =/  start-idx  (sub i 5)
+        =/  n-chars  (lent (trip feed-str))
+        =.  n-chars  (sub n-chars start-idx)
+        `@t`(cut 3 [start-idx n-chars] feed-str)
+      :: if matches, reset and wait for next tag
+      $(i +(i), rdy-for-tag |, curr-tag "")
+    :: add char to curr-tag
+    $(i +(i), curr-tag (weld curr-tag ~[char]))
+    ::
     =/  xml  (need (de-xml:html feed-str))
     =/  bcl  c:xml  :: list of children in base
     :: loop through each xml base-element, with a switch statement processing 
@@ -407,12 +436,18 @@
     ++  p-rss
       |=  [bcl=(list manx) out=feed]
       ^-  feed
+      :: bcl currently list of 1 channel element, so must get channels' children
+      ?~  bcl  :: this is neccessary to access `i`
+        out
+      =/  bcl  c:i:bcl
+      ::
       |-
       :: if list (`t` face) is null, is end of list, so return list
       ?~  bcl
         out
       =/  tag  n:g:i:bcl
       ~&  tag  :: print element tag
+      :: ~&  n:g:i:&1:c:i:bcl
       ::
       =.  out  ?+  tag  ~&  "TAG NOT FOUND: {<tag>}"  out
           %item  out
