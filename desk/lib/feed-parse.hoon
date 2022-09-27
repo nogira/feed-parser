@@ -133,8 +133,7 @@
   :: get first char of feed `cord` to determine is json or xml
   ?:  =(`@t`(cut 3 [0 1] feed-str) '{')
     (json-parse feed-str)
-  :: (xml-parse feed-str)
-  *feed
+  (xml-parse feed-str)
   |%
   ++  json-parse
     =<
@@ -400,20 +399,82 @@
     =<
     |=  feed-str=@t
     ^-  feed
+    =|  out=feed
     =/  xml  (need (de-xml:html feed-str))
-    ~&  n:g:xml
-    =*  elem-list  c:xml
-    ?:  =(n:g:xml %feed)  :: if this is %feed, it's an atom feed, else it's a rss feed
-      !!
-    :: loop through each xml base-attribute, with a switch statment procossing 
+    =/  bcl  c:xml  :: list of children in base
+    :: loop through each xml base-element, with a switch statement processing 
     :: each element. including other arms that e.g. does the processing 
     :: (looping through elements/attributes) for an author, etc
-    |-
-    !!
+    ?:  =(n:g:xml %feed)  :: if this is %feed, it's an atom feed, else it's a rss feed
+        =.  feed-type.out  %atom
+        (p-atom bcl out)
+      =.  feed-type.out  %rss-2
+      (p-rss bcl out)
     =<
     |%  :: --rss parsing--
+    ++  p-rss
+      |=  [bcl=(list manx) out=feed]
+      ^-  feed
+      |-
+      :: if list (`t` face) is null, is end of list, so return list
+      ?~  bcl
+        out
+      =/  tag  n:g:i:bcl
+      ~&  tag  :: print element tag
+      ::
+      =.  out  ?+  tag  ~&  "TAG NOT FOUND: {<tag>}"  out
+          %item  out
+        ==
+      $(bcl t:bcl, out out)
     --
+    =<
     |%  :: --atom parsing--
+    ++  p-atom
+      |=  [bcl=(list manx) out=feed]
+      ^-  feed
+      |-
+      :: if list (`t` face) is null, is end of list, so return list
+      ?~  bcl
+        out
+      =/  elem  i:bcl
+      =/  tag  n:g:elem
+      ~&  tag  :: print element tag
+      ::
+      =.  out  ?+  tag  ~&  "TAG NOT FOUND: {<tag>}"  out
+          %author  out
+          %entry  out
+          %id   =.  id.out  (inner-txt elem)  out
+          %link  =.  links.out  (p-link elem links.out)  out
+          %published  out
+          %title  =.  title.out  [~ content=(inner-txt elem) content-type='text' src=~]  out
+        ==
+      $(bcl t:bcl, out out)
+    --
+    |%  :: --xml parsing--
+    ++  inner-txt
+      |=  el=manx
+      ^-  @t
+      (crip v:i:&1:a:g:i:&1:c:el)
+    ++  p-link
+      |=  [el=manx lks=(list link)]
+      ^-  (list link)
+      =/  attrs  a:g:el
+      ~&  attrs
+      :-
+      %+  roll  attrs
+        :: it seems for <link> it never uses `[@tas @tas]` from the type union, 
+        :: but needs to be there anyway for the type checker
+        |=  [[term=?(@tas [@tas @tas]) val=tape] accum=link]
+        ^-  link
+        ?+  term  !!  :: should never crash
+          %href  =.  href.accum  (crip val)  accum
+          %href-lang  =.  href-lang.accum  [~ (crip val)]  accum
+          %length  =.  length.accum  [~ (scan (trip (crip val)) dem)]  accum
+          %media-type  =.  media-type.accum  [~ (crip val)]  accum
+          %rel  =.  rel.accum  [~ (crip val)]  accum
+          %title  =.  title.accum  [~ (crip val)]  accum
+        ==
+      lks
     --
   --
 --
