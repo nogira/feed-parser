@@ -1,5 +1,9 @@
 :: this lib is based on https://github.com/feed-rs/feed-rs (fave feed lib !!)
-:: atom specs: https://validator.w3.org/feed/docs/atom.html
+::
+:: json spec: https://www.jsonfeed.org/version/1.1/
+:: atom spec: https://validator.w3.org/feed/docs/atom.html
+:: rss spec: https://cyber.harvard.edu/rss/rss.html
+:: rss/atom media spec: https://www.rssboard.org/media-rss
 =<
 |%
 +$  category
