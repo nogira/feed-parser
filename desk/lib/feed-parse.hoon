@@ -276,7 +276,7 @@
         :: media
         =.  media.entry  (p-media mp)
         :: published 
-        =.  published.entry  (p-date (get-str-attr mp 'date_published'))
+        =.  published.entry  (p-date-rfc3339 (get-str-attr mp 'date_published'))
         :: rights
         ::   - non-existent
         :: source
@@ -292,7 +292,7 @@
             ~
           [~ content=(need tt) content-type='text' src=~]
         :: updated
-        =.  updated.entry  (p-date (get-str-attr mp 'date_modified'))
+        =.  updated.entry  (p-date-rfc3339 (get-str-attr mp 'date_modified'))
         ::
         entry
       ::
@@ -449,14 +449,106 @@
       :: if list (`t` face) is null, is end of list, so return list
       ?~  bcl
         out
-      =/  tag  n:g:i:bcl
-      ~&  tag  :: print element tag
-      :: ~&  n:g:i:&1:c:i:bcl
+      =/  elem  i:bcl
+      =/  tag  n:g:elem
+      =.  tag  (norm-tag tag ~[['lastBuildDate' 'last-build-date'] ['managingEditor' 'managing-editor'] ['pubDate' 'pub-date'] ['webMaster' 'web-master']] ~)
       ::
       =.  out  ?+  tag  ~&  "TAG NOT FOUND: {<tag>}"  out
-          %item  out
+          %category  =/  cat  [label=~ scheme=~ term=(need (inner-txt elem))]
+            =.  categories.out  [cat categories.out]  out
+          %copyright  =.  rights.out  (p-text elem)  out
+          %description  =.  description.out  (p-text elem)  out
+          %generator  =|  gen=generator
+            =.  content.gen  (need (inner-txt elem))
+            =.  generator.out  [~ gen]  out
+          %image  =.  icon.out  (p-image elem)  out
+          %item  =.  entries.out  [(p-item elem) entries.out]  out
+          %language  =.  language.out  (inner-txt elem)  out
+          %last-build-date  =.  updated.out  (p-date-rfc882 (inner-txt elem))  out
+          %link  =/  lnk  *link
+            =.  href.lnk  (need (inner-txt elem))
+            =.  links.out  [lnk links.out]  out
+          %managing-editor  =/  ps  *person
+            =.  name.ps  (need (inner-txt elem))
+            =.  contributors.out  [ps contributors.out]  out
+          %pub-date  =.  published.out  (p-date-rfc882 (inner-txt elem))  out
+          :: TODO: support rating elem
+          :: %rating
+          %title  =.  title.out  (p-text elem)
+            :: make it the id too bc there is no id attribute for rss channel
+            =.  id.out  content:(need title.out)  out
+          %ttl  =.  ttl.out  [~ `@ud`(scan (trip (need (inner-txt elem))) dem)]  out
+          %web-master  =/  ps  *person
+            =.  name.ps  (need (inner-txt elem))
+            =.  contributors.out  [ps contributors.out]  out
         ==
       $(bcl t:bcl, out out)
+    ++  p-image
+      |=  el=manx
+      ^-  (unit image)
+      =/  elems  c:el
+      :-  ~
+      %+  roll  elems
+        :: check ++p-link for info about `[@tas @tas]`
+        |=  [elem=manx accum=image]
+        ^-  image
+        =/  tag  n:g:elem
+        =/  txt  (need (inner-txt elem))
+        ?+  tag  ~&  "RSS IMAGE TAG NOT FOUND: {<tag>}"  accum
+          %description  =.  title.accum  [~ txt]  accum
+          %height  =.  height.accum  [~ `@ud`(scan (trip txt) dem)]  accum
+          %link  =/  lnk  *link
+            =.  href.lnk  txt  accum
+          %title  =.  title.accum  [~ txt]  accum
+          %url  =.  uri.accum  txt  accum
+          %width  =.  width.accum  [~ `@ud`(scan (trip txt) dem)]  accum
+        ==
+    ++  p-item
+      |=  el=manx
+      ^-  entry
+      =/  elems  c:el
+      %+  roll  elems
+        |=  [elem=manx accum=entry]
+        ^-  entry
+        =/  tag  n:g:elem
+        =.  tag  (norm-tag tag ~[['pubDate' 'pub-date']] ~)
+        ?+  tag  ~&  "ENTRY TAG NOT FOUND: {<tag>}"  accum
+          %author  =/  ps  *person
+            =.  email.ps  (inner-txt elem)
+            =.  authors.accum  [ps authors.accum]  accum
+          %category  =/  cat  [label=~ scheme=~ term=(need (inner-txt elem))]
+            =.  categories.accum  [cat categories.accum]  accum
+          :: TODO: add comments to entry data structure ???
+          :: %comments
+          %description  =.  summary.accum  (p-text elem)  accum
+          %enclosure  =/  mo  *media-object
+            =.  content.mo  ~[(p-enclosure elem)]
+            =.  media.accum  [mo media.accum]  accum
+          %guid  =.  id.accum  (need (inner-txt elem))  accum
+          %link  =/  lnk  *link
+            =.  href.lnk  (need (inner-txt elem))
+            =.  links.accum  [lnk links.accum]  accum
+          [%media %group]  =.  media.accum  [(p-media-group elem) media.accum]  accum
+          %pub-date  =.  published.accum  (p-date-rfc882 (inner-txt elem))  accum
+          %source  =.  source.accum  (inner-txt elem)  accum
+          %title  =/  txt  *text
+            =.  content.txt  (need (inner-txt elem))
+            =.  content-type.txt  'text'
+            =.  title.accum  [~ txt]  accum
+        ==
+    ++  p-enclosure
+      |=  el=manx
+      ^-  media-content
+      =/  attrs  a:g:el
+      %+  roll  attrs
+        |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=media-content]
+        ^-  media-content
+        =/  txt  (crip val)
+        ?+  tag  ~&  "ENCLOSURE ATTR NOT FOUND: {<tag>}"  accum
+          %length  =.  size.accum  [~ `@ud`(scan (trip txt) dem)]  accum
+          %type  =.  content-type.accum  [~ txt]  accum
+          %url  =.  url.accum  [~ txt]  accum
+        ==
     --
     =<
     |%  :: --atom parsing--
@@ -469,29 +561,52 @@
         out
       =/  elem  i:bcl
       =/  tag  n:g:elem
-      ~&  tag  :: print element tag
       ::
       =.  out  ?+  tag  ~&  "TAG NOT FOUND: {<tag>}"  out
-          %author  =.  authors.out  (p-person elem authors.out)  out
-          %category  =.  categories.out  (p-category elem categories.out)  out
-          %contributor  =.  contributors.out  (p-person elem contributors.out)  out
-          %entry  =.  entries.out  (p-entry elem entries.out)  out
+          %author  =.  authors.out  [(p-person elem) authors.out]  out
+          %category  =.  categories.out  [(p-category elem) categories.out]  out
+          %contributor  =.  contributors.out  [(p-person elem) contributors.out]  out
+          %entry  =.  entries.out  [(p-entry elem) entries.out]  out
           %generator  =.  generator.out  (p-generator elem)  out
           %icon  =/  img  *image
             =.  uri.img  (need (inner-txt elem))
             =.  icon.out  [~ img]  out
           %id  =.  id.out  (need (inner-txt elem))  out
-          %link  =.  links.out  (p-link elem links.out)  out
+          %link  =.  links.out  [(p-link elem) links.out]  out
           %logo  =/  img  *image
             =.  uri.img  (need (inner-txt elem))
             =.  logo.out  [~ img]  out
-          %published  =.  published.out  (p-date (inner-txt elem))  out
-          %rights  =.  rights.out  [~ *text]  out
+          %published  =.  published.out  (p-date-rfc3339 (inner-txt elem))  out
+          %rights  =.  rights.out  (p-text elem)  out
           %subtitle  =.  description.out  (p-text elem)  out
           %title  =.  title.out  (p-text elem)  out
-          %updated  =.  updated.out  (p-date (inner-txt elem))  out
+          %updated  =.  updated.out  (p-date-rfc3339 (inner-txt elem))  out
         ==
       $(bcl t:bcl, out out)
+    ++  p-entry
+      |=  el=manx
+      ^-  entry
+      =/  elems  c:el
+      %+  roll  elems
+        :: check ++p-link for info about `[@tas @tas]`
+        |=  [elem=manx accum=entry]
+        ^-  entry
+        =/  tag  n:g:elem
+        ?+  tag  ~&  "ENTRY TAG NOT FOUND: {<tag>}"  accum
+          %author  =.  authors.accum  [(p-person elem) authors.accum]  accum
+          %category  =.  categories.accum  [(p-category elem) categories.accum]  accum
+          %content  =.  content.accum  (p-content elem)  accum
+          %contributor  =.  contributors.accum  [(p-person elem) contributors.accum]  accum
+          %id  =.  id.accum  (need (inner-txt elem))  accum
+          %link  =.  links.accum  [(p-link elem) links.accum]  accum
+          [%media %group]  =.  media.accum  [(p-media-group elem) media.accum]  accum
+          %published  =.  published.accum  (p-date-rfc3339 (inner-txt elem))  accum
+          %rights  =.  rights.accum  (p-text elem)  accum
+          %source  =.  source.accum  (p-source elem)  accum
+          %summary  =.  summary.accum  (p-text elem)  accum
+          %title  =.  title.accum  (p-text elem)  accum
+          %updated  =.  updated.accum  (p-date-rfc3339 (inner-txt elem))  accum
+        ==
     --
     |%  :: --xml parsing--  :: TODO: might need to convert all html entities in xml inner text !!
     ++  inner-txt
@@ -513,10 +628,9 @@
       =.  content.out  (need (inner-txt el))
       [~ out]
     ++  p-link
-      |=  [el=manx lks=(list link)]
-      ^-  (list link)
+      |=  el=manx
+      ^-  link
       =/  attrs  a:g:el
-      :-
       %+  roll  attrs
         :: it seems for <link> it never uses `[@tas @tas]` from the type union, 
         :: but needs to be there anyway for the type checker
@@ -532,12 +646,10 @@
           %rel  =.  rel.accum  txt  accum
           %title  =.  title.accum  txt  accum
         ==
-      lks
     ++  p-person
-      |=  [el=manx ppl=(list person)]
-      ^-  (list person)
+      |=  el=manx
+      ^-  person
       =/  elems  c:el
-      :-
       %+  roll  elems
         :: check ++p-link for info about `[@tas @tas]`
         |=  [elem=manx accum=person]
@@ -550,7 +662,6 @@
           %name  =.  name.accum  (need txt)  accum
           %uri  =.  uri.accum  txt  accum
         ==
-      ppl
     ++  p-source
       |=  el=manx
       ^-  (unit @t)
@@ -564,10 +675,9 @@
           %id  (inner-txt elem)
         ==
     ++  p-category
-      |=  [el=manx cts=(list category)]
-      ^-  (list category)
+      |=  el=manx
+      ^-  category
       =/  attrs  a:g:el
-      :-
       %+  roll  attrs
         :: check ++p-link for info about `[@tas @tas]`
         |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=category]
@@ -578,7 +688,6 @@
           %scheme  =.  scheme.accum  txt  accum
           %label  =.  label.accum  txt  accum
         ==
-      cts
     ++  p-generator
       |=  el=manx
       ^-  (unit generator)
@@ -594,32 +703,6 @@
         ==
       =.  content.out  (need (inner-txt el))
       [~ out]
-    ++  p-entry
-      |=  [el=manx ets=(list entry)]
-      ^-  (list entry)
-      =/  elems  c:el
-      :-
-      %+  roll  elems
-        :: check ++p-link for info about `[@tas @tas]`
-        |=  [elem=manx accum=entry]
-        ^-  entry
-        =/  tag  n:g:elem
-        ?+  tag  ~&  "ENTRY TAG NOT FOUND: {<tag>}"  accum
-          %author  =.  authors.accum  (p-person elem authors.accum)  accum
-          %category  =.  categories.accum  (p-category elem categories.accum)  accum
-          %content  =.  content.accum  (p-content elem)  accum
-          %contributor  =.  contributors.accum  (p-person elem contributors.accum)  accum
-          %id  =.  id.accum  (need (inner-txt elem))  accum
-          %link  =.  links.accum  (p-link elem links.accum)  accum
-          [%media %group]  =.  media.accum  (p-media-group elem media.accum)  accum
-          %published  =.  published.accum  (p-date (inner-txt elem))  accum
-          %rights  =.  rights.accum  (p-text elem)  accum
-          %source  =.  source.accum  (p-source elem)  accum
-          %summary  =.  summary.accum  (p-text elem)  accum
-          %title  =.  title.accum  (p-text elem)  accum
-          %updated  =.  updated.accum  (p-date (inner-txt elem))  accum
-        ==
-      ets
     ++  p-content
       |=  el=manx
       ^-  (unit content)
@@ -640,10 +723,9 @@
       [~ out]
     ++  p-media-group
       =<
-      |=  [el=manx mol=(list media-object)]
-      ^-  (list media-object)
+      |=  el=manx
+      ^-  media-object
       =/  elems  c:el
-      :-
       %+  roll  elems
         |=  [elem=manx accum=media-object]
         ^-  media-object
@@ -652,20 +734,18 @@
         :: TODO: add more tags !!
         :: FIXME: duration=(unit @dr) property of media-object not added. perhaps remove from the media-object data structure ??
           [%media %community]  =.  community.accum  (p-media-community elem)  accum
-          [%media %content]  =.  content.accum  (p-media-content elem content.accum)  accum
+          [%media %content]  =.  content.accum  [(p-media-content elem) content.accum]  accum
           [%media %credit]  =.  credits.accum  [(p-media-credit elem) credits.accum]  accum
           [%media %description]  =.  description.accum  (p-text elem)  accum
           [%media %thumbnail]  =.  thumbnails.accum  [(p-media-thumbnail elem) thumbnails.accum]  accum
           [%media %text]  =.  texts.accum  [(p-media-text elem) texts.accum]  accum
           [%media %title]  =.  title.accum  (p-text elem)  accum
         ==
-      mol
       |%
       ++  p-media-content
-        |=  [el=manx mcl=(list media-content)]
-        ^-  (list media-content)
+        |=  el=manx
+        ^-  media-content
         =/  attrs  a:g:el
-        :-
         %+  roll  attrs
           :: check ++p-link for info about `[@tas @tas]`
           |=  [[tag=?(@tas [@tas @tas]) txt=tape] accum=media-content]
@@ -679,7 +759,6 @@
             %url  =.  url.accum  [~ (crip txt)]  accum
             %width  =.  width.accum  [~ (scan txt dem)]  accum
           ==
-        mcl
       ++  p-media-credit
         |=  el=manx
         ^-  media-credit
@@ -772,13 +851,11 @@
           ?+  tag  ~&  "MEDIA TEXT ATTR NOT FOUND: {<tag>}"  accum
             :: e.g. "00:00:17.000"
             :: ignoring the ms bc kind useless
-            %end  =,  p-date
-              =/  hr  `@dr`(yule `tarp`[0 (num (cut-2 txt 0)) 0 0 ~])
+            %end  =/  hr  `@dr`(yule `tarp`[0 (num (cut-2 txt 0)) 0 0 ~])
               =/  mn  `@dr`(yule `tarp`[0 0 (num (cut-2 txt 3)) 0 ~])
               =/  sc  `@dr`(yule `tarp`[0 0 0 (num (cut-2 txt 6)) ~])
               =.  end-time.accum  [~ `@dr`:(add hr mn sc)]  accum
-            %start  =,  p-date
-              =/  hr  `@dr`(yule `tarp`[0 (num (cut-2 txt 0)) 0 0 ~])
+            %start  =/  hr  `@dr`(yule `tarp`[0 (num (cut-2 txt 0)) 0 0 ~])
               =/  mn  `@dr`(yule `tarp`[0 0 (num (cut-2 txt 3)) 0 ~])
               =/  sc  `@dr`(yule `tarp`[0 0 0 (num (cut-2 txt 6)) ~])
               =.  start-time.accum  [~ `@dr`:(add hr mn sc)]  accum
@@ -820,16 +897,25 @@
 --
 :: --general helper functions--
 |%
-++  p-date
-  =<
+:: cut 2 digit @t string from larger @t string
+++  cut-2
+  |=  [a=@t i=@ud]
+  `@t`(cut 3 [i 2] a)
+:: convert @t to @ud
+++  num
+  |=  in=@t
+  ^-  @ud
+  (scan (trip in) dem)
+:: convert rfc3339 string to @da
+:: https://www.rfc-editor.org/rfc/rfc3339
+:: e.g. '2020-08-07T11:44:36-05:00'
+++  p-date-rfc3339
   |=  t=(unit @t)
   ^-  (unit @da)
   :: return null if input is null
   ?~  t
     ~
   =/  t  (need t)
-  :: time format: https://www.rfc-editor.org/rfc/rfc3339
-  :: e.g. '2020-08-07T11:44:36-05:00'
   :: y:m:d
   =+  yr=`@t`(cut 3 [0 4] t)
   =+  mo=(cut-2 t 5)
@@ -865,15 +951,46 @@
     t=[d=(num dy) h=(num hr) m=(num mn) s=(num sc) f=~]
   df
   ::
-  |%
-  :: convert @t to @ud
-  ++  num
-    |=  in=@t
-    ^-  @ud
-    (scan (trip in) dem)
-  :: cut 2 digit @t string from larger @t string
-  ++  cut-2
-    |=  [a=@t i=@ud]
-    `@t`(cut 3 [i 2] a)
-  --
+:: convert rfc882 string to @da
+:: https://www.ietf.org/rfc/rfc822.txt
+:: e.g. 'Sat, 07 Sep 2002 09:42:31 GMT'
+::      'Thu, 22 Sep 2022 09:00:39 GMT'
+++  p-date-rfc882
+  |=  t=(unit @t)
+  ^-  (unit @da)
+  :: return null if input is null
+  ?~  t
+    ~
+  =/  t  (need t)
+  :: dd  mmm  yyyy
+  =/  dy  (num (cut-2 t 5))
+  =/  mo  =/  mo-str  `@t`(cut 3 [9 2] t)  :: slice 'an' of 'Jan', etc, bc can't have capital char in switch statement below
+    ?+  mo-str  !! :: shouldn't crash
+      %an  1
+      %eb  2
+      %ar  3
+      %pr  4
+      %ay  5
+      %un  6
+      %ul  7
+      %ug  8
+      %ep  9
+      %ct  10
+      %ov  11
+      %ec  12
+    ==
+  =/  yr  (num `@t`(cut 3 [12 4] t))
+  :: h:m:s
+  =/  hr  (num (cut-2 t 17))
+  =/  mn  (num (cut-2 t 20))
+  =/  sc  (num (cut-2 t 23))
+  ::
+  :: FIXME: ACCOUNT FOR TIMEZONE
+  ::
+  :: return as unit
+  :-  ~
+  ^-  @da  ^-  @
+  :: create @da
+  %-  year
+  [[a=%.y y=yr] [m=mo t=[d=dy h=hr m=mn s=sc f=~]]]
 --
