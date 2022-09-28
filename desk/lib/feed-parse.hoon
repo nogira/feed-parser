@@ -413,7 +413,7 @@
       ?:  ?!(=(curr-tag "?xml"))
         :: if doesn't match "?xml", end and return xml w/o all chars prev to "<123"
         =/  start-idx  (sub i 5)
-        =/  n-chars  (lent (trip feed-str))
+        =/  n-chars  (met 3 feed-str) :: get length of `feed-str` cord
         =.  n-chars  (sub n-chars start-idx)
         `@t`(cut 3 [start-idx n-chars] feed-str)
       :: if matches, reset and wait for next tag
@@ -644,7 +644,6 @@
         |=  [elem=manx accum=media-object]
         ^-  media-object
         =/  tag  n:g:elem
-        ~&  tag
         ?+  tag  ~&  "MEDIA OBJECT TAG NOT FOUND: {<tag>}"  accum
         :: TODO: add more tags !!
         :: credits=(list media-credit)
@@ -665,19 +664,16 @@
         :-
         %+  roll  attrs
           :: check ++p-link for info about `[@tas @tas]`
-          |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=media-content]
+          |=  [[tag=?(@tas [@tas @tas]) txt=tape] accum=media-content]
           ^-  media-content
-          =/  txt  [~ (crip val)]
+          =.  tag  (norm-tag tag ~[['fileSize' 'file-size']] ~)
           ?+  tag  ~&  "MEDIA CONTENT ATTR NOT FOUND: {<tag>}"  accum
-            %duration  =.  duration.accum  [~ `@dr`(yule `tarp`[0 0 0 (scan (trip (need txt)) dem) ~])]  accum
-            :: %fileSize is incorrect syntax to impossible to match the 
-            :: %fileSize term (and idk how tf the xml even made the %fileSize 
-            :: term in the first place given its incorrect syntax ????)
-            :: %fileSize  =.  size.accum  [~ (scan (trip (need txt)) dem)]  accum
-            %height  =.  height.accum  [~ (scan (trip (need txt)) dem)]  accum
-            %type  =.  content-type.accum  txt  accum
-            %url  =.  url.accum  txt  accum
-            %width  =.  width.accum  [~ (scan (trip (need txt)) dem)]  accum
+            %duration  =.  duration.accum  [~ `@dr`(yule `tarp`[0 0 0 (scan txt dem) ~])]  accum
+            %file-size  =.  size.accum  [~ (scan txt dem)]  accum
+            %height  =.  height.accum  [~ (scan txt dem)]  accum
+            %type  =.  content-type.accum  [~ (crip txt)]  accum
+            %url  =.  url.accum  [~ (crip txt)]  accum
+            %width  =.  width.accum  [~ (scan txt dem)]  accum
           ==
         mcl
       ++  p-media-thumbnail
@@ -687,13 +683,12 @@
         :-
         %+  roll  attrs
           :: check ++p-link for info about `[@tas @tas]`
-          |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=media-thumbnail]
+          |=  [[tag=?(@tas [@tas @tas]) txt=tape] accum=media-thumbnail]
           ^-  media-thumbnail
-          =/  txt  (crip val)
           ?+  tag  ~&  "MEDIA THUMBNAIL ATTR NOT FOUND: {<tag>}"  accum
-            %url  =.  uri.image.accum  txt  accum
-            %height  =.  height.image.accum  [~ (scan (trip txt) dem)]  accum
-            %width  =.  width.image.accum  [~ (scan (trip txt) dem)]  accum
+            %url  =.  uri.image.accum  (crip txt)  accum
+            %height  =.  height.image.accum  [~ (scan txt dem)]  accum
+            %width  =.  width.image.accum  [~ (scan txt dem)]  accum
           ==
         mtl
       ++  p-media-community
@@ -705,27 +700,78 @@
           |=  [elem=manx accum=media-community]
           ^-  media-community
           =/  tag  n:g:elem
-          ~&  tag
+          =.  tag  (norm-tag tag ~ ~[[['media' 'starRating'] ['media' 'star-rating']]])
           ?+  tag  ~&  "MEDIA COMMUNITY TAG NOT FOUND: {<tag>}"  accum
           :: TODO: add more tags !!
-            :: %starRating incorrect syntax
-            :: [%media %starRating]  accum
+            [%media %star-rating]  =.  accum  (p-media-stars elem accum)  accum
             [%media %statistics]  =.  accum  (p-media-statistics elem accum)  accum
           ==
       ++  p-media-statistics
         |=  [el=manx mtl=media-community]
         ^-  media-community
         =/  attrs  a:g:el
-        %+  roll  attrs
+        =/  mtl-stats  %+  roll  attrs
           :: check ++p-link for info about `[@tas @tas]`
-          |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=media-community]
+          |=  [[tag=?(@tas [@tas @tas]) txt=tape] accum=media-community]
           ^-  media-community
-          =/  txt  (crip val)
           ?+  tag  ~&  "MEDIA STATS ATTR NOT FOUND: {<tag>}"  accum
-            %views  =.  stats-views.accum  [~ (scan (trip txt) dem)]  accum
-            %favorites  =.  stats-favorites.accum  [~ (scan (trip txt) dem)]  accum
+            %views  =.  stats-views.accum  [~ (scan txt dem)]  accum
+            %favorites  =.  stats-favorites.accum  [~ (scan txt dem)]  accum
           ==
+        :: add media-community stats parsed above to input media-community
+        =.  stats-views.mtl  stats-views.mtl-stats
+        =.  stats-favorites.mtl  stats-favorites.mtl-stats
+        mtl
+      ++  p-media-stars
+        |=  [el=manx mtl=media-community]
+        ^-  media-community
+        =/  attrs  a:g:el
+        =/  mtl-stars  %+  roll  attrs
+          :: check ++p-link for info about `[@tas @tas]`
+          |=  [[tag=?(@tas [@tas @tas]) txt=tape] accum=media-community]
+          ^-  media-community
+          ?+  tag  ~&  "MEDIA STARS ATTR NOT FOUND: {<tag>}"  accum
+            %average  =/  frac-tp  ['.' txt]  :: e.g. "5.00" to ".5.00"
+              =.  stars-avg.accum  `(unit @rs)`(slaw %rs (crip frac-tp))  accum
+            %count  =.  stars-count.accum  [~ (scan txt dem)]  accum
+            %min  =.  stars-min.accum  [~ (scan txt dem)]  accum
+            %max  =.  stars-max.accum  [~ (scan txt dem)]  accum
+          ==
+        :: add media-community stars parsed above to input media-community
+        =.  stars-avg.mtl  stars-avg.mtl-stars
+        =.  stars-count.mtl  stars-count.mtl-stars
+        =.  stars-min.mtl  stars-min.mtl-stars
+        =.  stars-max.mtl  stars-max.mtl-stars
+        mtl
       --
+    :: normalize tag to correct `term` syntax so able to parse tag elem content
+    :: e.g. [%media %starRating] to [%media %star-rating] bc terms can't use capitals
+    ++  norm-tag
+      |=  [tag=?(@tas [@tas @tas]) a-pairs=(list [@tas @tas]) c-pairs=(list [[@tas @tas] [@tas @tas]])]
+      ^-  ?(@tas [@tas @tas])
+      ?@  tag
+        :: if tag is atom
+        =/  crd-tag  ^-  @t  tag
+        ^-  @tas
+        |-
+        :: if list empty / end of list, return original tag
+        ?~  a-pairs
+          crd-tag
+        =/  pair  i:a-pairs
+        ?:  =(crd-tag -:pair)
+          +:pair
+        $(a-pairs t:a-pairs)
+      :: if tag is cell
+      =/  crd-tag  ^-  [@t @t]  tag
+      ^-  [@tas @tas]
+      |-
+      :: if list empty / end of list, return original tag
+      ?~  c-pairs
+        crd-tag
+      =/  pair  i:c-pairs
+      ?:  =(crd-tag -:pair)
+        +:pair
+      $(c-pairs t:c-pairs)
     --
   --
 --
