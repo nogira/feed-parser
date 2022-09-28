@@ -86,7 +86,11 @@
       url=(unit @t)
       width=(unit @ud)
   ==
-+$  media-credit  entity=@t
++$  media-credit
+  $:  content=@t
+      role=(unit @t)
+      scheme=(unit @t)
+  ==
 +$  media-object
   $:  community=(unit media-community)
       content=(list media-content)
@@ -646,13 +650,13 @@
         =/  tag  n:g:elem
         ?+  tag  ~&  "MEDIA OBJECT TAG NOT FOUND: {<tag>}"  accum
         :: TODO: add more tags !!
-        :: credits=(list media-credit)
-        :: duration=(unit @dr)
-        :: texts=(list media-text)
+        :: FIXME: duration=(unit @dr) property of media-object not added. perhaps remove from the media-object data structure ??
           [%media %community]  =.  community.accum  (p-media-community elem)  accum
           [%media %content]  =.  content.accum  (p-media-content elem content.accum)  accum
+          [%media %credit]  =.  credits.accum  [(p-media-credit elem) credits.accum]  accum
           [%media %description]  =.  description.accum  (p-text elem)  accum
-          [%media %thumbnail]  =.  thumbnails.accum  (p-media-thumbnail elem thumbnails.accum)  accum
+          [%media %thumbnail]  =.  thumbnails.accum  [(p-media-thumbnail elem) thumbnails.accum]  accum
+          [%media %text]  =.  texts.accum  [(p-media-text elem) texts.accum]  accum
           [%media %title]  =.  title.accum  (p-text elem)  accum
         ==
       mol
@@ -676,11 +680,25 @@
             %width  =.  width.accum  [~ (scan txt dem)]  accum
           ==
         mcl
-      ++  p-media-thumbnail
-        |=  [el=manx mtl=(list media-thumbnail)]
-        ^-  (list media-thumbnail)
+      ++  p-media-credit
+        |=  el=manx
+        ^-  media-credit
         =/  attrs  a:g:el
-        :-
+        =/  out  %+  roll  attrs
+          :: check ++p-link for info about `[@tas @tas]`
+          |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=media-credit]
+          ^-  media-credit
+          =/  txt  [~ (crip val)]
+          ?+  tag  !!  :: should never crash
+            %role  =.  role.accum  txt  accum
+            %scheme  =.  scheme.accum  txt  accum
+          ==
+        =.  content.out  (need (inner-txt el))
+        out
+      ++  p-media-thumbnail
+        |=  el=manx
+        ^-  media-thumbnail
+        =/  attrs  a:g:el
         %+  roll  attrs
           :: check ++p-link for info about `[@tas @tas]`
           |=  [[tag=?(@tas [@tas @tas]) txt=tape] accum=media-thumbnail]
@@ -690,7 +708,6 @@
             %height  =.  height.image.accum  [~ (scan txt dem)]  accum
             %width  =.  width.image.accum  [~ (scan txt dem)]  accum
           ==
-        mtl
       ++  p-media-community
         |=  el=manx
         ^-  (unit media-community)
@@ -743,6 +760,32 @@
         =.  stars-min.mtl  stars-min.mtl-stars
         =.  stars-max.mtl  stars-max.mtl-stars
         mtl
+      ++  p-media-text
+        |=  el=manx
+        ^-  media-text
+        =/  attrs  a:g:el
+        =/  out  %+  roll  attrs
+          :: check ++p-link for info about `[@tas @tas]`
+          |=  [[tag=?(@tas [@tas @tas]) val=tape] accum=media-text]
+          ^-  media-text
+          =/  txt  (crip val)
+          ?+  tag  ~&  "MEDIA TEXT ATTR NOT FOUND: {<tag>}"  accum
+            :: e.g. "00:00:17.000"
+            :: ignoring the ms bc kind useless
+            %end  =,  p-date
+              =/  hr  `@dr`(yule `tarp`[0 (num (cut-2 txt 0)) 0 0 ~])
+              =/  mn  `@dr`(yule `tarp`[0 0 (num (cut-2 txt 3)) 0 ~])
+              =/  sc  `@dr`(yule `tarp`[0 0 0 (num (cut-2 txt 6)) ~])
+              =.  end-time.accum  [~ `@dr`:(add hr mn sc)]  accum
+            %start  =,  p-date
+              =/  hr  `@dr`(yule `tarp`[0 (num (cut-2 txt 0)) 0 0 ~])
+              =/  mn  `@dr`(yule `tarp`[0 0 (num (cut-2 txt 3)) 0 ~])
+              =/  sc  `@dr`(yule `tarp`[0 0 0 (num (cut-2 txt 6)) ~])
+              =.  start-time.accum  [~ `@dr`:(add hr mn sc)]  accum
+            %type  =.  content-type.text.accum  txt  accum
+          ==
+        =.  content.text.out  (need (inner-txt el))
+        out
       --
     :: normalize tag to correct `term` syntax so able to parse tag elem content
     :: e.g. [%media %starRating] to [%media %star-rating] bc terms can't use capitals
