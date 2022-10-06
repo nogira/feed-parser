@@ -195,9 +195,6 @@
     ::   - non-existent
     :: updated
     ::   - non-existent
-    ::
-    :: =/  obj-val  [[p='version' q=[%o p=[p='version' q=[%s p='https://jsonfeed.org/version/1']]]]]
-    :: ~&  (get-obj-attr obj-val 'version')
     out
     ::
     :: --parsing the diff types--
